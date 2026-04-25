@@ -6,7 +6,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QSpinBox>
-#include <QTextEdit>
 #include <QTableWidget>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -32,7 +31,7 @@ public:
 
     bool isValid() const {
         return !name.isEmpty() && !description.isEmpty() && !color.isEmpty()
-               && inkLevel >= 0 && inkLevel <= 100;
+        && inkLevel >= 0 && inkLevel <= 100;
     }
 
     QJsonObject toJson() const {
@@ -170,7 +169,7 @@ private:
     QSpinBox *m_inkSpin;
 };
 
-// ================================ ПРОГРАММА 2 (Вывод и битые) ================================
+// ================================ ПРОГРАММА 2 (Вывод и битые в файл) ================================
 class Program2Dialog : public QDialog {
     Q_OBJECT
 public:
@@ -182,10 +181,16 @@ public:
         QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
         QHBoxLayout* tablesLayout = new QHBoxLayout;
-        m_validTable = new QTableWidget; m_validTable->setColumnCount(4);
+        m_validTable = new QTableWidget;
+        m_validTable->setColumnCount(4);
         m_validTable->setHorizontalHeaderLabels({"Название", "Описание", "Цвет", "Чернила"});
-        m_brokenTable = new QTableWidget; m_brokenTable->setColumnCount(4);
+        m_validTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+        m_brokenTable = new QTableWidget;
+        m_brokenTable->setColumnCount(4);
         m_brokenTable->setHorizontalHeaderLabels({"Название", "Описание", "Цвет", "Чернила"});
+        m_brokenTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
         tablesLayout->addWidget(m_validTable);
         tablesLayout->addWidget(m_brokenTable);
         mainLayout->addLayout(tablesLayout);
@@ -207,12 +212,18 @@ private slots:
     void refresh() {
         auto markers = loadFromJson(m_jsonFile);
         std::vector<Marker> valid, broken;
+
         for (const auto& m : markers) {
-            if (m.isValid()) valid.push_back(m);
-            else broken.push_back(m);
+            if (m.isValid())
+                valid.push_back(m);
+            else
+                broken.push_back(m);
         }
+
+        //  Сохраняем битые объекты в отдельный файл (как требует задание)
         saveToJson(broken, "broken.json");
 
+        // Заполняем таблицу корректных
         m_validTable->setRowCount(valid.size());
         for (size_t i = 0; i < valid.size(); ++i) {
             m_validTable->setItem(i, 0, new QTableWidgetItem(valid[i].name));
@@ -220,6 +231,8 @@ private slots:
             m_validTable->setItem(i, 2, new QTableWidgetItem(valid[i].color));
             m_validTable->setItem(i, 3, new QTableWidgetItem(QString::number(valid[i].inkLevel)));
         }
+
+        // Заполняем таблицу битых
         m_brokenTable->setRowCount(broken.size());
         for (size_t i = 0; i < broken.size(); ++i) {
             m_brokenTable->setItem(i, 0, new QTableWidgetItem(broken[i].name));
