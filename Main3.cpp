@@ -1,360 +1,338 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <iomanip>
-#include <limits>
-#include <cctype>
+#include <QApplication>
+#include <QMainWindow>
+#include <QWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QLineEdit>
+#include <QLabel>
+#include <QSpinBox>
+#include <QTextEdit>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
+#include <QHeaderView>
+#include <QStackedWidget>
+#include <QGroupBox>
 
 class Marker {
 public:
-    std::string name;
-    std::string description;
-    std::string color;
+    QString name;
+    QString description;
+    QString color;
     int inkLevel;
 
-    Marker() : name(""), description(""), color(""), inkLevel(0) {}
-    
-    std::string toJson() const {
-        std::stringstream ss;
-        ss << "{\n"
-           << "  \"name\": \"" << escapeJson(name) << "\",\n"
-           << "  \"description\": \"" << escapeJson(description) << "\",\n"
-           << "  \"color\": \"" << escapeJson(color) << "\",\n"
-           << "  \"inkLevel\": " << inkLevel << "\n"
-           << "}";
-        return ss.str();
-    }
-    
-    static Marker fromJson(const std::string& json) {
-        Marker m;
-        m.name = getJsonValue(json, "name");
-        m.description = getJsonValue(json, "description");
-        m.color = getJsonValue(json, "color");
-        std::string inkStr = getJsonValue(json, "inkLevel");
-        try { m.inkLevel = std::stoi(inkStr); }
-        catch (...) { m.inkLevel = -1; }
-        return m;
-    }
-    
-    bool isValid() const {
-        if (name.empty() || description.empty() || color.empty())
-            return false;
-        if (inkLevel < 0 || inkLevel > 100)
-            return false;
-        for (char c : color)
-            if (!std::isalpha(c) && c != ' ' && c != '-')
-                return false;
-        return true;
-    }
-    
-    std::string getErrors() const {
-        std::string errors;
-        if (name.empty()) errors += "пустое название ";
-        if (description.empty()) errors += "пустое описание ";
-        if (color.empty()) errors += "пустой цвет ";
-        else {
-            bool valid = true;
-            for (char c : color)
-                if (!std::isalpha(c) && c != ' ' && c != '-')
-                    valid = false;
-            if (!valid) errors += "некорректный цвет ";
-        }
-        if (inkLevel < 0 || inkLevel > 100) errors += "неверный уровень ";
-        return errors.empty() ? "OK" : errors;
-    }
-    
-    static std::vector<Marker> loadAll(const std::string& filename) {
-        std::vector<Marker> markers;
-        std::ifstream file(filename);
-        if (!file.is_open()) return markers;
-        
-        std::string content((std::istreambuf_iterator<char>(file)),
-                            std::istreambuf_iterator<char>());
-        file.close();
-        
-        size_t pos = 0;
-        while ((pos = content.find("{", pos)) != std::string::npos) {
-            size_t end = content.find("}", pos);
-            if (end == std::string::npos) break;
-            std::string obj = content.substr(pos, end - pos + 1);
-            markers.push_back(fromJson(obj));
-            pos = end + 1;
-        }
-        return markers;
-    }
-    
-    static void saveAll(const std::string& filename, const std::vector<Marker>& markers) {
-        std::ofstream file(filename);
-        if (!file.is_open()) return;
-        file << "[\n";
-        for (size_t i = 0; i < markers.size(); ++i) {
-            file << markers[i].toJson();
-            if (i < markers.size() - 1) file << ",";
-            file << "\n";
-        }
-        file << "]\n";
-        file.close();
-    }
-    
-    static Marker fromTxtLine(const std::string& line) {
-        Marker m;
-        std::stringstream ss(line);
-        std::string token;
-        std::vector<std::string> tokens;
-        while (std::getline(ss, token, '/'))
-            tokens.push_back(token);
-        if (tokens.size() >= 4) {
-            m.name = tokens[0];
-            m.description = tokens[1];
-            m.color = tokens[2];
-            try { m.inkLevel = std::stoi(tokens[3]); }
-            catch (...) { m.inkLevel = -1; }
-        }
-        return m;
-    }
-    
-    void print() const {
-        std::cout << "Название: " << name << "\n"
-                  << "Описание: " << description << "\n"
-                  << "Цвет: " << color << "\n"
-                  << "Уровень чернил: " << inkLevel << "\n";
+    Marker() : inkLevel(0) {}
+    Marker(const QString& n, const QString& d, const QString& c, int i)
+        : name(n), description(d), color(c), inkLevel(i) {}
+
+    QJsonObject toJson() const {
+        QJsonObject obj;
+        obj["name"] = name;
+        obj["description"] = description;
+        obj["color"] = color;
+        obj["inkLevel"] = inkLevel;
+        return obj;
     }
 
-private:
-    static std::string escapeJson(const std::string& s) {
-        std::string result;
-        for (char c : s) {
-            if (c == '\"') result += "\\\"";
-            else if (c == '\\') result += "\\\\";
-            else result += c;
-        }
-        return result;
+    static Marker fromJson(const QJsonObject& json) {
+        Marker m;
+        m.name = json["name"].toString();
+        m.description = json["description"].toString();
+        m.color = json["color"].toString();
+        m.inkLevel = json["inkLevel"].toInt(-1);
+        return m;
     }
-    
-    static std::string getJsonValue(const std::string& json, const std::string& key) {
-        std::string search = "\"" + key + "\":";
-        size_t pos = json.find(search);
-        if (pos == std::string::npos) return "";
-        
-        pos += search.length();
-        while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n' || json[pos] == '\t'))
-            pos++;
-        
-        if (pos >= json.length()) return "";
-        
-        if (json[pos] == '\"') {
-            pos++;
-            std::string value;
-            while (pos < json.length() && json[pos] != '\"') {
-                if (json[pos] == '\\' && pos + 1 < json.length())
-                    pos++;
-                value += json[pos];
-                pos++;
-            }
-            return value;
-        } else {
-            std::string value;
-            while (pos < json.length() && json[pos] != ',' && json[pos] != '\n' && json[pos] != '}' && json[pos] != ' ') {
-                value += json[pos];
-                pos++;
-            }
-            return value;
+
+    bool isValid() const {
+        if (name.isEmpty() || description.isEmpty() || color.isEmpty()) return false;
+        if (inkLevel < 0 || inkLevel > 100) return false;
+        for (const QChar& c : color)
+            if (!c.isLetter() && c != ' ' && c != '-') return false;
+        return true;
+    }
+
+    QString getErrors() const {
+        QString errors;
+        if (name.isEmpty()) errors += "пустое название; ";
+        if (description.isEmpty()) errors += "пустое описание; ";
+        if (color.isEmpty()) errors += "пустой цвет; ";
+        else {
+            bool valid = true;
+            for (const QChar& c : color)
+                if (!c.isLetter() && c != ' ' && c != '-') valid = false;
+            if (!valid) errors += "некорректный цвет; ";
         }
+        if (inkLevel < 0 || inkLevel > 100) errors += "уровень 0-100; ";
+        return errors.isEmpty() ? "OK" : errors;
+    }
+
+    static QVector<Marker> loadAll(const QString& filename) {
+        QVector<Marker> markers;
+        QFile file(filename);
+        if (!file.open(QIODevice::ReadOnly)) return markers;
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        file.close();
+        if (doc.isArray())
+            for (const auto& val : doc.array())
+                markers.append(fromJson(val.toObject()));
+        return markers;
+    }
+
+    static void saveAll(const QString& filename, const QVector<Marker>& markers) {
+        QJsonArray arr;
+        for (const auto& m : markers)
+            arr.append(m.toJson());
+        QFile file(filename);
+        if (file.open(QIODevice::WriteOnly)) {
+            file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+            file.close();
+        }
+    }
+
+    static Marker fromTxtLine(const QString& line) {
+        Marker m;
+        QStringList parts = line.split('/');
+        if (parts.size() >= 4) {
+            m.name = parts[0];
+            m.description = parts[1];
+            m.color = parts[2];
+            m.inkLevel = parts[3].toInt();
+        }
+        return m;
     }
 };
 
-void clearScreen() {
-    system("cls");
-}
+class Program1Widget : public QWidget {
+    Q_OBJECT
+public:
+    Program1Widget(QWidget* parent = nullptr) : QWidget(parent) {
+        auto* layout = new QVBoxLayout(this);
 
-void program1() {
-    const std::string FILENAME = "markers.json";
-    
-    while (true) {
-        clearScreen();
-        std::cout << "1. Создать маркер\n"
-                  << "2. Импорт из TXT\n"
-                  << "3. Показать все\n"
-                  << "0. Назад\n"
-                  << "Выбор: ";
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        
-        if (choice == 0) break;
-        
-        if (choice == 1) {
-            clearScreen();
-            Marker m;
-            std::cout << "Название: ";
-            std::getline(std::cin, m.name);
-            std::cout << "Описание: ";
-            std::getline(std::cin, m.description);
-            std::cout << "Цвет: ";
-            std::getline(std::cin, m.color);
-            while (true) {
-                std::cout << "Уровень чернил (0-100): ";
-                std::string input;
-                std::getline(std::cin, input);
-                try {
-                    m.inkLevel = std::stoi(input);
-                    if (m.inkLevel >= 0 && m.inkLevel <= 100) break;
-                    std::cout << "Ошибка: значение от 0 до 100\n";
-                } catch (...) {
-                    std::cout << "Ошибка: введите число\n";
+        auto* formGroup = new QGroupBox("Данные маркера");
+        auto* formLayout = new QVBoxLayout(formGroup);
+
+        auto* nameLayout = new QHBoxLayout();
+        nameLayout->addWidget(new QLabel("Название:"));
+        nameEdit = new QLineEdit();
+        nameLayout->addWidget(nameEdit);
+        formLayout->addLayout(nameLayout);
+
+        auto* descLayout = new QHBoxLayout();
+        descLayout->addWidget(new QLabel("Описание:"));
+        descEdit = new QLineEdit();
+        descLayout->addWidget(descEdit);
+        formLayout->addLayout(descLayout);
+
+        auto* colorLayout = new QHBoxLayout();
+        colorLayout->addWidget(new QLabel("Цвет:"));
+        colorEdit = new QLineEdit();
+        colorLayout->addWidget(colorEdit);
+        formLayout->addLayout(colorLayout);
+
+        auto* inkLayout = new QHBoxLayout();
+        inkLayout->addWidget(new QLabel("Уровень чернил:"));
+        inkSpin = new QSpinBox();
+        inkSpin->setRange(0, 100);
+        inkLayout->addWidget(inkSpin);
+        formLayout->addLayout(inkLayout);
+
+        layout->addWidget(formGroup);
+
+        auto* buttonsLayout = new QHBoxLayout();
+        auto* addBtn = new QPushButton("Добавить в JSON");
+        auto* importBtn = new QPushButton("Импорт из TXT");
+        auto* viewBtn = new QPushButton("Показать все");
+        buttonsLayout->addWidget(addBtn);
+        buttonsLayout->addWidget(importBtn);
+        buttonsLayout->addWidget(viewBtn);
+        layout->addLayout(buttonsLayout);
+
+        table = new QTableWidget();
+        table->setColumnCount(4);
+        table->setHorizontalHeaderLabels({"Название", "Описание", "Цвет", "Уровень чернил"});
+        table->horizontalHeader()->setStretchLastSection(true);
+        layout->addWidget(table);
+
+        connect(addBtn, &QPushButton::clicked, this, &Program1Widget::addMarker);
+        connect(importBtn, &QPushButton::clicked, this, &Program1Widget::importFromTxt);
+        connect(viewBtn, &QPushButton::clicked, this, &Program1Widget::showAll);
+    }
+
+private slots:
+    void addMarker() {
+        Marker m(nameEdit->text(), descEdit->text(), colorEdit->text(), inkSpin->value());
+        auto markers = Marker::loadAll("markers.json");
+        markers.append(m);
+        Marker::saveAll("markers.json", markers);
+        QMessageBox::information(this, "Готово", "Маркер добавлен");
+        showAll();
+        nameEdit->clear();
+        descEdit->clear();
+        colorEdit->clear();
+        inkSpin->setValue(0);
+    }
+
+    void importFromTxt() {
+        QString filename = QFileDialog::getOpenFileName(this, "Выберите TXT файл", "", "Текстовые файлы (*.txt)");
+        if (filename.isEmpty()) return;
+
+        QFile file(filename);
+        if (!file.open(QIODevice::ReadOnly)) {
+            QMessageBox::warning(this, "Ошибка", "Не удалось открыть файл");
+            return;
+        }
+        QString line = file.readLine().trimmed();
+        file.close();
+
+        Marker m = Marker::fromTxtLine(line);
+        nameEdit->setText(m.name);
+        descEdit->setText(m.description);
+        colorEdit->setText(m.color);
+        inkSpin->setValue(m.inkLevel);
+
+        QMessageBox::information(this, "Импорт", "Данные загружены. Отредактируйте и нажмите Добавить");
+    }
+
+    void showAll() {
+        auto markers = Marker::loadAll("markers.json");
+        table->setRowCount(markers.size());
+        for (int i = 0; i < markers.size(); ++i) {
+            table->setItem(i, 0, new QTableWidgetItem(markers[i].name));
+            table->setItem(i, 1, new QTableWidgetItem(markers[i].description));
+            table->setItem(i, 2, new QTableWidgetItem(markers[i].color));
+            table->setItem(i, 3, new QTableWidgetItem(QString::number(markers[i].inkLevel)));
+        }
+    }
+
+private:
+    QLineEdit* nameEdit;
+    QLineEdit* descEdit;
+    QLineEdit* colorEdit;
+    QSpinBox* inkSpin;
+    QTableWidget* table;
+};
+
+class Program2Widget : public QWidget {
+    Q_OBJECT
+public:
+    Program2Widget(QWidget* parent = nullptr) : QWidget(parent) {
+        auto* layout = new QVBoxLayout(this);
+
+        auto* fileLayout = new QHBoxLayout();
+        fileLayout->addWidget(new QLabel("JSON файл:"));
+        fileEdit = new QLineEdit("markers.json");
+        fileLayout->addWidget(fileEdit);
+        auto* browseBtn = new QPushButton("Обзор");
+        fileLayout->addWidget(browseBtn);
+        auto* loadBtn = new QPushButton("Загрузить");
+        fileLayout->addWidget(loadBtn);
+        layout->addLayout(fileLayout);
+
+        table1 = new QTableWidget();
+        table1->setColumnCount(5);
+        table1->setHorizontalHeaderLabels({"Название", "Описание", "Цвет", "Ур.чернил", "Статус"});
+        table1->horizontalHeader()->setStretchLastSection(true);
+        layout->addWidget(new QLabel("ТАБЛИЦА 1 (корректные, сортировка Я→А):"));
+        layout->addWidget(table1);
+
+        table2 = new QTableWidget();
+        table2->setColumnCount(5);
+        table2->setHorizontalHeaderLabels({"Название", "Описание", "Цвет", "Ур.чернил", "Ошибки"});
+        table2->horizontalHeader()->setStretchLastSection(true);
+        layout->addWidget(new QLabel("ТАБЛИЦА 2 (битые):"));
+        layout->addWidget(table2);
+
+        auto* statsLabel = new QLabel();
+        layout->addWidget(statsLabel);
+
+        connect(browseBtn, &QPushButton::clicked, [this]() {
+            QString filename = QFileDialog::getOpenFileName(this, "Выберите JSON", "", "JSON (*.json)");
+            if (!filename.isEmpty()) fileEdit->setText(filename);
+        });
+
+        connect(loadBtn, &QPushButton::clicked, [this, statsLabel]() {
+            auto all = Marker::loadAll(fileEdit->text());
+
+            QVector<Marker> valid, broken;
+            for (const auto& m : all)
+                (m.isValid() ? valid : broken).append(m);
+
+            std::sort(valid.begin(), valid.end(), [](const Marker& a, const Marker& b) {
+                return a.name > b.name;
+            });
+
+            if (!broken.isEmpty())
+                Marker::saveAll("broken.json", broken);
+
+            auto fillTable = [](QTableWidget* table, const QVector<Marker>& markers, bool showErrors) {
+                table->setRowCount(markers.size());
+                for (int i = 0; i < markers.size(); ++i) {
+                    table->setItem(i, 0, new QTableWidgetItem(markers[i].name));
+                    table->setItem(i, 1, new QTableWidgetItem(markers[i].description));
+                    table->setItem(i, 2, new QTableWidgetItem(markers[i].color));
+                    table->setItem(i, 3, new QTableWidgetItem(QString::number(markers[i].inkLevel)));
+                    table->setItem(i, 4, new QTableWidgetItem(markers[i].getErrors()));
                 }
-            }
-            auto markers = Marker::loadAll(FILENAME);
-            markers.push_back(m);
-            Marker::saveAll(FILENAME, markers);
-            std::cout << "Добавлено\n";
-            std::cin.get();
-        }
-        else if (choice == 2) {
-            clearScreen();
-            std::cout << "Имя TXT файла: ";
-            std::string txtFile;
-            std::getline(std::cin, txtFile);
-            
-            Marker m;
-            std::ifstream file(txtFile);
-            if (!file.is_open()) {
-                std::cout << "Ошибка открытия файла\n";
-                std::cin.get();
-                continue;
-            }
-            std::string line;
-            if (!std::getline(file, line)) {
-                std::cout << "Файл пуст\n";
-                file.close();
-                std::cin.get();
-                continue;
-            }
-            file.close();
-            m = Marker::fromTxtLine(line);
-            std::cout << "Импортировано:\n";
-            m.print();
-            
-            std::string input;
-            std::cout << "\nНазвание [" << m.name << "]: ";
-            std::getline(std::cin, input);
-            if (!input.empty()) m.name = input;
-            std::cout << "Описание [" << m.description << "]: ";
-            std::getline(std::cin, input);
-            if (!input.empty()) m.description = input;
-            std::cout << "Цвет [" << m.color << "]: ";
-            std::getline(std::cin, input);
-            if (!input.empty()) m.color = input;
-            std::cout << "Уровень чернил [" << m.inkLevel << "]: ";
-            std::getline(std::cin, input);
-            if (!input.empty()) {
-                try {
-                    int val = std::stoi(input);
-                    if (val >= 0 && val <= 100) m.inkLevel = val;
-                } catch (...) {}
-            }
-            
-            auto markers = Marker::loadAll(FILENAME);
-            markers.push_back(m);
-            Marker::saveAll(FILENAME, markers);
-            std::cout << "Сохранено\n";
-            std::cin.get();
-        }
-        else if (choice == 3) {
-            clearScreen();
-            auto markers = Marker::loadAll(FILENAME);
-            for (size_t i = 0; i < markers.size(); ++i) {
-                std::cout << "Маркер " << i+1 << ":\n";
-                markers[i].print();
-                std::cout << "\n";
-            }
-            std::cin.get();
-        }
+            };
+
+            fillTable(table1, valid, false);
+            fillTable(table2, broken, true);
+
+            statsLabel->setText(QString("Всего: %1 | Корректных: %2 | Битых: %3")
+                               .arg(all.size()).arg(valid.size()).arg(broken.size()));
+        });
     }
+
+private:
+    QLineEdit* fileEdit;
+    QTableWidget* table1;
+    QTableWidget* table2;
+};
+
+class MainWindow : public QMainWindow {
+public:
+    MainWindow() {
+        setWindowTitle("Лабораторная работа №6 — Маркеры");
+        resize(800, 600);
+
+        auto* central = new QWidget();
+        setCentralWidget(central);
+        auto* layout = new QVBoxLayout(central);
+
+        auto* btnLayout = new QHBoxLayout();
+        auto* btn1 = new QPushButton("Программа 1 (создание/импорт)");
+        auto* btn2 = new QPushButton("Программа 2 (обработка)");
+        btnLayout->addWidget(btn1);
+        btnLayout->addWidget(btn2);
+        layout->addLayout(btnLayout);
+
+        stack = new QStackedWidget();
+        prog1 = new Program1Widget();
+        prog2 = new Program2Widget();
+        stack->addWidget(prog1);
+        stack->addWidget(prog2);
+        layout->addWidget(stack);
+
+        connect(btn1, &QPushButton::clicked, [this]() { stack->setCurrentIndex(0); });
+        connect(btn2, &QPushButton::clicked, [this]() { stack->setCurrentIndex(1); });
+    }
+
+private:
+    QStackedWidget* stack;
+    Program1Widget* prog1;
+    Program2Widget* prog2;
+};
+
+int main(int argc, char* argv[]) {
+    QApplication app(argc, argv);
+    MainWindow w;
+    w.show();
+    return app.exec();
 }
 
-void program2() {
-    std::cout << "Путь к JSON файлу: ";
-    std::string filename;
-    std::getline(std::cin, filename);
-    if (filename.empty()) filename = "markers.json";
-    
-    auto allMarkers = Marker::loadAll(filename);
-    
-    std::vector<Marker> validMarkers;
-    std::vector<Marker> brokenMarkers;
-    
-    for (const auto& m : allMarkers) {
-        if (m.isValid())
-            validMarkers.push_back(m);
-        else
-            brokenMarkers.push_back(m);
-    }
-    
-    std::sort(validMarkers.begin(), validMarkers.end(),
-              [](const Marker& a, const Marker& b) {
-                  return a.name > b.name;
-              });
-    
-    if (!brokenMarkers.empty())
-        Marker::saveAll("broken.json", brokenMarkers);
-    
-    auto printTable = [](const std::vector<Marker>& markers, const std::string& title) {
-        std::cout << title << "\n";
-        std::cout << std::string(100, '-') << "\n";
-        std::cout << std::left
-                  << std::setw(20) << "Название"
-                  << std::setw(30) << "Описание"
-                  << std::setw(15) << "Цвет"
-                  << std::setw(12) << "Ур.чернил"
-                  << std::setw(20) << "Статус" << "\n";
-        std::cout << std::string(100, '-') << "\n";
-        for (const auto& m : markers) {
-            std::cout << std::left
-                      << std::setw(20) << m.name.substr(0, 19)
-                      << std::setw(30) << m.description.substr(0, 29)
-                      << std::setw(15) << m.color.substr(0, 14)
-                      << std::setw(12) << m.inkLevel
-                      << std::setw(20) << m.getErrors() << "\n";
-        }
-        std::cout << std::string(100, '-') << "\n";
-    };
-    
-    printTable(validMarkers, "ТАБЛИЦА 1 (корректные)");
-    
-    if (!brokenMarkers.empty())
-        printTable(brokenMarkers, "ТАБЛИЦА 2 (битые)");
-    
-    std::cout << "Всего: " << allMarkers.size() 
-              << " | Корректных: " << validMarkers.size()
-              << " | Битых: " << brokenMarkers.size() << "\n";
-    
-    std::cout << "\nНажмите Enter для возврата...";
-    std::cin.get();
-}
-
-int main() {
-    setlocale(LC_ALL, "Russian");
-    
-    while (true) {
-        clearScreen();
-        std::cout << "ЛАБОРАТОРНАЯ РАБОТА 6 - МАРКЕРЫ\n\n";
-        std::cout << "1. Программа 1 (создание/импорт)\n";
-        std::cout << "2. Программа 2 (обработка)\n";
-        std::cout << "0. Выход\n";
-        std::cout << "Выбор: ";
-        
-        int choice;
-        std::cin >> choice;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        
-        if (choice == 0) break;
-        if (choice == 1) program1();
-        if (choice == 2) program2();
-    }
-    
-    return 0;
-}
+#include "main.moc"
